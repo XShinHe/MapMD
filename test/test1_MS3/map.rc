@@ -1,0 +1,7 @@
+mapmodel	6
+phsangle	0.5
+mapnstep	100000
+mapnsamp	1
+mapdtime	0.0001
+inistate	1
+hnondiag	0.2

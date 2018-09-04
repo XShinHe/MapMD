@@ -1,0 +1,12 @@
+mapmodel	1
+phsangle	1.4
+mapbeta     0.1
+mapnstep	5000
+mapnsamp	1
+mapdtime	0.01
+inistate	1
+hnondiag	0.01
+mapimag     0
+n1  1
+n2  1
+n3  1
