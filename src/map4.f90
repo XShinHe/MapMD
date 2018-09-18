@@ -38,6 +38,7 @@ implicit none
 	!-- allocatable objects of H-matrix etc.
 	real(8), dimension(:,:), allocatable :: map_mtxH ! Hamiltonian
 	real(8), dimension(:,:), allocatable :: map_mtxV ! kinds of valuables
+	real(8), dimension(:,:), allocatable :: map_mtxO ! matixe of e^(-H)
 	real(8), dimension(:), allocatable   :: map_mtxN   ! Populations
 	!-- modification arguments of Hamiltonian, if not set the value < 0
 	real(8) :: map_Hnondiag = -1.0
@@ -145,14 +146,28 @@ contains
 	    enddo
 	end function map_pop
 	
+	!-- renormalization
+	subroutine map_renorm()
+		real(8) :: pop
+		if(map_imag .eq. 1) then
+			if(map_analmd .eq. 2) then
+				pop = 0
+			    do i=1,map_mtxsize
+			        pop = pop + 0.5*(map_mtxV(1,i)**2 + map_mtxV(2,i)**2)
+			    end do
+			    map_mtxV(:,:) = map_mtxV(:,:)/sqrt(pop)
+			end if
+		end if
+	end subroutine map_renorm
+	
 	!-- if imaginary dynamics, to obtain excited components, should eliminate the ground state components
-	subroutine map_elimnorm(elimfile)
+	subroutine map_eraser(elimfile)
 	    character(*), intent(in) :: elimfile
 	    real(8), dimension(map_vardim,map_mtxsize) :: tempvs
-	    real(8) :: prj_re, prj_im, pop
+	    real(8) :: prj_re, prj_im
 	    integer :: i, myiostat
 	    if(map_imag.eq. 1) then
-	        !-- read VS_ground
+	        !-- read file for elimination
 		    open(unit=23,file=trim(elimfile),status="old")
 		    do i=1,map_mtxsize
 		        read(23,*,iostat=myiostat) tempvs(:,i)
@@ -160,7 +175,7 @@ contains
 		    enddo
 		    close(unit=23)
 		    
-		    !-- only analmd2 supported 
+		    !-- only analmd2 supported
             if(map_analmd .eq. 2) then
                 !-- calculate porjection of VS_excited and VS_ground
 			    prj_re = 0
@@ -175,17 +190,10 @@ contains
 			        map_mtxV(1,i) = map_mtxV(1,i) - (prj_re/2.0) * tempvs(1,i)
 			        map_mtxV(2,i) = map_mtxV(2,i) - (prj_im/2.0) * tempvs(2,i)
 			    enddo
-
-                !-- do normalization
-			    pop = 0
-			    do i=1,map_mtxsize
-			        pop = pop + 0.5*(map_mtxV(1,i)**2 + map_mtxV(2,i)**2)
-			    end do
-			    map_mtxV(:,:) = map_mtxV(:,:)/sqrt(pop)
 			end if
 	    end if
 	    return
-	end subroutine map_elimnorm
+	end subroutine map_eraser
 	
 	
 	!-- random seed
@@ -264,7 +272,7 @@ contains
 		                        map_initmd = 3
 		                        map_analmd = 4
 		                    case (9)
-		                        map_vardim = 4
+		                        map_vardim = 2
 		                        map_initmd = 4
 		                        map_analmd = 5
 		                    case (10)
@@ -292,11 +300,11 @@ contains
 		            	read(pairs(2),*) map_Hnondiag
 		            case ('mapimag')
 		            	read(pairs(2),*) map_imag
-		            case ('n1')
+		            case ('dc1')
 		                read(pairs(2),*) map_dc(1)
-		            case ('n2')
+		            case ('dc2')
 		                read(pairs(2),*) map_dc(2)
-		            case ('n3')
+		            case ('dc3')
 		                read(pairs(2),*) map_dc(3)    
 		            case default
 		            	print *, "warning, arguments in 'map.rc' doesn't match!"
@@ -334,6 +342,7 @@ contains
         !------ 2) initialize the size of state space
         read(10, *) map_mtxsize
         allocate(map_mtxH(map_mtxsize, map_mtxsize))
+        allocate(map_mtxO(map_mtxsize, map_mtxsize))
         allocate(map_mtxV( map_vardim , map_mtxsize))   ! alternatively, just allocate size of (4, map_mtxzize)
         allocate(map_mtxN(map_mtxsize))
         
@@ -358,6 +367,13 @@ contains
         do my_count=1,map_mtxsize
         	print *, map_mtxH(my_count,:)
         end do
+        
+        !-- initial the O-matrix at infinite temperature
+        !-- ??
+        map_mtxO(:,:) = 0.0
+        do i=1,map_mtxsize
+        	map_mtxO(i,i) = 1.0/map_mtxsize
+        enddo
 	end subroutine map_initmap
 	
 	
@@ -367,7 +383,8 @@ contains
 	implicit none
 		real(8), intent(in) :: dtime
 		integer :: i,j
-		real    :: irand, x, y, c, s, cc, ss, sc
+		real(8) :: irand, x, y, c, s, cc, ss, sc
+		real(8) :: Elevel1, Elevel2
 		
 		!-- differet model, different propagator
 		!------ note that:
@@ -505,102 +522,43 @@ contains
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/4) * H_ddot(i,4)
 				    end do
 			    case (7)
-			        irand = 20
+			        irand = 0.5
 				    do i=1,map_mtxsize
 				        !call random_number(irand)
 				        x = 2*irand
 				        y = 2 - x
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/8) * ( x*H_ddot(i,1) + y*H_ddot(i,4) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/8) * ( x*H_ndot(i,1) + y*H_ndot(i,4) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(4,i) = map_mtxV(4,i) - (dtime/8) * ( x*H_ndot(i,3) - y*H_ndot(i,2) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(4,i) = map_mtxV(4,i) + (dtime/4) * (-x*H_ddot(i,3) + y*H_ddot(i,2) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/8) * ( x*H_ndot(i,1) + y*H_ndot(i,4) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(4,i) = map_mtxV(4,i) - (dtime/8) * ( x*H_ndot(i,3) - y*H_ndot(i,2) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/8) * ( x*H_ddot(i,1) + y*H_ddot(i,4) )
 				    !end do
 				    !do i=1,map_mtxsize
-				        !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(1,i) = map_mtxV(1,i) - (dtime/4) * ( x*H_ddot(i,3) - y*H_ddot(i,2) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(1,i) = map_mtxV(1,i) + (dtime/4) * ( y*H_ndot(i,2) - x*H_ndot(i,3) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(3,i) = map_mtxV(3,i) + (dtime/4) * ( x*H_ndot(i,1) + y*H_ndot(i,4) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(3,i) = map_mtxV(3,i) + (dtime/2) * ( x*H_ddot(i,1) + y*H_ddot(i,4) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(1,i) = map_mtxV(1,i) + (dtime/4) * ( x*H_ndot(i,2) - y*H_ndot(i,3) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(3,i) = map_mtxV(3,i) + (dtime/4) * ( y*H_ndot(i,4) + x*H_ndot(i,1) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(1,i) = map_mtxV(1,i) - (dtime/4) * ( x*H_ddot(i,3) - y*H_ddot(i,2) )
 				    !end do
 				    !do i=1,map_mtxsize
-				        !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/8) * ( x*H_ddot(i,1) + y*H_ddot(i,4) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/8) * ( x*H_ndot(i,1) + y*H_ndot(i,4) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(4,i) = map_mtxV(4,i) - (dtime/8) * ( x*H_ndot(i,3) - y*H_ndot(i,2) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(4,i) = map_mtxV(4,i) + (dtime/4) * (-x*H_ddot(i,3) + y*H_ddot(i,2) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/8) * ( x*H_ndot(i,1) + y*H_ndot(i,4) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(4,i) = map_mtxV(4,i) - (dtime/8) * ( x*H_ndot(i,3) - y*H_ndot(i,2) )
-					    !call random_number(irand)
-				        x = 2*irand
-				        y = 2 - x
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/8) * ( x*H_ddot(i,1) + y*H_ddot(i,4) )
 				    end do
+				!-- WITH BUGS of case 8 --- model of mixed mapping
 		        case (8)
 		            c = sqrt(2.0)*map_cos
 		            s = sqrt(2.0)*map_sin
 		            cc = sqrt(2.0)*map_cos*map_sin
-		            ss = sqrt(2.0)*map_cos*map_sin
+		            ss = sqrt(2.0)*map_sin*map_sin
 		            sc = 1.0
 				    call random_number(irand)
 				    x = 1.0!x = 2*irand
@@ -633,36 +591,50 @@ contains
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/8) * ( x*cc*H_ddot(i,1) + y*sc*H_ddot(i,4) )
 				    end do
 			    !-- for spin mapping model
-			    !-- map_mtxV(1,i):    m
-			    !-- map_mtxV(2,i):    q
+			    !-- map_mtxV(1,i):    q(i)  angular action
+			    !-- map_mtxV(2,i):    m(i)  angular momenta
 			    case (9)
 				    do i=1, map_mtxsize
-				        map_mtxV(1,i) = map_mtxV(1,i) + (dtime) * (1.0) * map_mtxH(i,i)
+				        map_mtxV(1,i) = map_mtxV(1,i) + (dtime) * (1.0 + map_mtxV(2,i)) * map_mtxH(i,i)
 				        do j=1, map_mtxsize
-				            !-- cancel the next line
 				            if(i.eq.j) cycle
-				            map_mtxV(1,i) = map_mtxV(1,i) - (dtime) * 2* (map_mtxV(2,i)/spinm(i)) * spinm(j) * cosd(i,j) *map_mtxH(i,j)
+				            map_mtxV(1,i) = map_mtxV(1,i) - (dtime) * (2.0*map_mtxV(2,i)/spinm(i)) * spinm(j) * cosd(i,j) *map_mtxH(i,j)
 				        end do
 				    end do
 				    do i=1, map_mtxsize
 				        do j=1, map_mtxsize
 				            if(i.eq.j) cycle
-				            map_mtxV(2,i) = map_mtxV(2,i) + (dtime) * 2*spinm(i) * spinm(j) * sind(i,j) *map_mtxH(i,j)
+				            map_mtxV(2,i) = map_mtxV(2,i) + (dtime) * spinm(i) * spinm(j) * sind(i,j) *map_mtxH(i,j)
 				        end do
 				    end do
 				!-- quarternion mapping
+				!------ performance: accuracy at dt=0.001 for three-state model
 				case (10)
 				    do i=1, map_mtxsize
-				        map_mtxV(1,i) = map_mtxV(1,i) + map_dtime * ( map_dc(1)*H_dot(i,2) + map_dc(2)*H_dot(i,3) + map_dc(3)*H_dot(i,4) )
-				        map_mtxV(2,i) = map_mtxV(2,i) + map_dtime * (-map_dc(1)*H_dot(i,1) - map_dc(2)*H_dot(i,4) + map_dc(3)*H_dot(i,3) )
-				        map_mtxV(3,i) = map_mtxV(3,i) + map_dtime * ( map_dc(1)*H_dot(i,4) - map_dc(2)*H_dot(i,1) - map_dc(3)*H_dot(i,2) )
-				        map_mtxV(4,i) = map_mtxV(4,i) + map_dtime * (-map_dc(1)*H_dot(i,3) + map_dc(2)*H_dot(i,2) - map_dc(3)*H_dot(i,1) )
+				        map_mtxV(1,i) = map_mtxV(1,i) + (map_dtime/2.0) * &
+				        	( map_dc(1)*H_dot(i,2) + map_dc(2)*H_dot(i,3) + map_dc(3)*H_dot(i,4) )
+				        map_mtxV(2,i) = map_mtxV(2,i) + (map_dtime/4.0) * &
+				        	(-map_dc(1)*H_dot(i,1) + map_dc(3)*H_dot(i,3) - map_dc(2)*H_dot(i,4) )
+				        map_mtxV(4,i) = map_mtxV(4,i) + (map_dtime/2.0) * &
+				        	(-map_dc(3)*H_dot(i,1) + map_dc(2)*H_dot(i,2) - map_dc(1)*H_dot(i,3) )
+				        map_mtxV(2,i) = map_mtxV(2,i) + (map_dtime/4.0) * &
+				        	(-map_dc(1)*H_dot(i,1) + map_dc(3)*H_dot(i,3) - map_dc(2)*H_dot(i,4) )
+				        map_mtxV(3,i) = map_mtxV(3,i) + (map_dtime) * &
+				        	(-map_dc(2)*H_dot(i,1) - map_dc(3)*H_dot(i,2) + map_dc(1)*H_dot(i,4) )
+				        map_mtxV(2,i) = map_mtxV(2,i) + (map_dtime/4.0) * &
+				        	(-map_dc(1)*H_dot(i,1) + map_dc(3)*H_dot(i,3) - map_dc(2)*H_dot(i,4) )
+				        map_mtxV(4,i) = map_mtxV(4,i) + (map_dtime/2.0) * &
+				        	(-map_dc(3)*H_dot(i,1) + map_dc(2)*H_dot(i,2) - map_dc(1)*H_dot(i,3) )
+				        map_mtxV(2,i) = map_mtxV(2,i) + (map_dtime/4.0) * &
+				        	(-map_dc(1)*H_dot(i,1) + map_dc(3)*H_dot(i,3) - map_dc(2)*H_dot(i,4) )
+				        map_mtxV(1,i) = map_mtxV(1,i) + (map_dtime/2.0) * &
+				        	( map_dc(1)*H_dot(i,2) + map_dc(2)*H_dot(i,3) + map_dc(3)*H_dot(i,4) )	
 				    end do
 		    end select
 		!-- IMAGINARY dynamics
 		elseif(map_imag .eq. 1) then
 		    select case (map_model)
-		        ! need added
+		    	!-- 4-valuables model with normalization
 			    case (1)
 				    do i=1, map_mtxsize
 					    map_mtxV(1,i) = map_mtxV(1,i) - (dtime/2) * H_dot(i,3)
@@ -672,17 +644,27 @@ contains
 					    map_mtxV(1,i) = map_mtxV(1,i) - (dtime/2) * H_dot(i,3)
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/2) * H_dot(i,4)
 				    end do
-			    !-- revised for imaginary time (more easy)
+				!-- 2-valuables model with normalization ( natural expression of Schrodinger Equation )
 			    case (2)
 				    do i=1,map_mtxsize
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/2) * H_dot(i,2)
 					    map_mtxV(1,i) = map_mtxV(1,i) - (dtime)   * H_dot(i,1)
 					    map_mtxV(2,i) = map_mtxV(2,i) - (dtime/2) * H_dot(i,2)
 				    end do
+				!-- 2-valuables model with parameter level off
+				case (3)
+					Elevel1 = dot_product( map_mtxV(1,:), dot_product(map_mtxH, map_mtxV(1,:)) )
+			    	Elevel2 = dot_product( map_mtxV(2,:), dot_product(map_mtxH, map_mtxV(2,:)) )
+			    	map_mtxV(2,:) = map_mtxV(2,:) - (dtime/2) * ( H_dot(i,2) - Elevel2 * map_mtxV(2,:) )
+			    	map_mtxV(1,:) = map_mtxV(1,:) - (dtime) * ( H_dot(i,1) - Elevel1 * map_mtxV(1,:) )
+			    	map_mtxV(2,:) = map_mtxV(2,:) - (dtime/2) * ( H_dot(i,2) - Elevel2 * map_mtxV(2,:) )
 			    case default
 				    print *, "not support now!"
 				    stop
 		    end select
+		!-- evaluate the matrix of [ exp^(-H) ] 
+		elseif(map_imag .eq. 2) then
+			map_mtxO(:,:) = map_mtxO(:,:) - (dtime) * dot_product(map_mtxH, map_mtxO) 
 		else
 		    print *, "map_imag should be 0 or 1"
 		    stop
@@ -846,32 +828,57 @@ contains
 	end subroutine map_sampler
 
 	!-- control the all propagation
-	!------ note that; this binds the procedure "initializer, propagator, annlyzer" all together
+	!------ note that; this binds the procedure "initializer, propagator, analyzer" all together
 	subroutine map_controller
 	implicit none
 		integer :: i
 		
 		!-- sampling to pop.dat
 		open(unit=20, file=trim('pop.dat'), status='replace')
+		!-- coordinate data
 		open(unit=21, file=trim('coo.dat'), status='replace')
+		!-- project on 2nd state data
 		open(unit=22, file=trim('pj2.dat'), status='replace')
 		call map_initializer()
-		call map_elimnorm('el1.dat')
-		call map_elimnorm('el2.dat')
-		call map_elimnorm('el3.dat')
+		
 		map_npass = 0
-		do i=1,map_nstep
-			call map_propagator(map_dtime)
-			call map_elimnorm('el1.dat')
-		    call map_elimnorm('el2.dat')
-		    call map_elimnorm('el3.dat')
-			!analyzer also provide scaling the population
-			call map_analyzer()
-			map_npass = map_npass + 1
-			if(mod(map_npass, map_nsamp) .eq. 0) then
-				call map_sampler()
-			end if
-		end do
+		!-- REAL dynamics
+		if(map_imag .eq. 0) then
+			do i=1,map_nstep
+				call map_propagator(map_dtime)
+				call map_analyzer()
+				map_npass = map_npass + 1
+				if(mod(map_npass, map_nsamp) .eq. 0) then
+					call map_sampler()
+				end if
+			enddo
+		!-- IMAG dynamics
+		elseif(map_imag .eq. 1) then
+			!call map_eraser('el1.dat')
+			!call map_eraser('el2.dat')
+			!call map_eraser('el3.dat')
+			!call map_renorm()
+			do i=1,map_nstep
+				call map_propagator(map_dtime)
+				!call map_eraser('el1.dat')
+				!call map_eraser('el2.dat')
+				!call map_eraser('el3.dat')
+				!call map_renorm()
+				call map_analyzer()
+				map_npass = map_npass + 1
+				if(mod(map_npass, map_nsamp) .eq. 0) then
+					call map_sampler()
+				end if
+			end do
+		!-- Boltzmann OP
+		else
+			do i=1,map_nstep
+				call map_propagator(map_beta/map_nstep)
+			enddo
+			open(unit=23, file=trim('bol.dat'), status='replace')
+			
+		endif
+		
 		close(unit=20)
 		close(unit=21)
 		close(unit=22)
