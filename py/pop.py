@@ -35,7 +35,7 @@ else:
     plt.plot(xs,ys,'r--')
     plt.xlabel("time [a.u.]")
     plt.ylabel(r"population on $\mid %d \rangle$ state"%clmn)
-plt.title("Four spin-orbitals model")
+plt.title("Three states model")
 plt.savefig(fflg+str(clmn)+'pop.png')
 
 if(sys.argv[3]=='Y'):

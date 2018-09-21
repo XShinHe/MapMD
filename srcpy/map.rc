@@ -1,9 +1,9 @@
-mapmodel	3
+mapmodel	10
 phsangle	1.4
 mapbeta     0.1
-mapnstep	100
+mapnstep	10000
 mapnsamp	1
-mapdtime	0.2
+mapdtime	0.001
 inistate	1
 hnondiag	0.2
 mapimag     0
