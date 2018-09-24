@@ -59,37 +59,68 @@ class vecc:
         phangle = self.argdict['phangle']
         istate = self.argdict['istate']
         
-        if self.cdim == 2 and self.imod ==0 :
+        if self.cdim == 2 and self.imod ==0 :  # 2-component normal initial
             self.vc[istate,0] = np.cos(phangle)
             self.vc[istate,1] = np.sin(phangle)
-        elif( self.cdim == 4 and self.imod == 0 ):
+            self.pmod = 0
+        elif( self.cdim == 4 and self.imod == 0 ): # 4-component normal initial # also other kind of initial methods
+            self.vc[istate,0] = np.cos(phangle)/np.sqrt(2)
+            self.vc[istate,1] = np.sin(phangle)/np.sqrt(2)
+            self.vc[istate,2] = np.cos(phangle)/np.sqrt(2)
+            self.vc[istate,3] = np.sin(phangle)/np.sqrt(2)
+            self.pmod = 0
+            
+        elif( self.cdim == 4 and self.imod == 1 ): # 4-component split initial  (split-2 components)
+            self.vc[istate,0] = np.cos(phangle)/2
+            self.vc[istate,1] = np.sin(phangle)/2
+            self.vc[istate,2] = np.cos(phangle)/2
+            self.vc[istate,3] = np.sin(phangle)/2
+            self.pmod = 1
+            
+        elif( self.cdim == 4 and self.imod == 2 ): # 4-component mixed initial
             self.vc[istate,0] = np.cos(phangle)
-            self.vc[istate,1] = 0
-            self.vc[istate,2] = np.sin(phangle)
-            self.vc[istate,3] = 0
-        elif( self.cdim == 4 and self.imod == 1 ):
+            self.vc[istate,1] = np.sin(phangle)
+            self.vc[istate,2] = np.cos(phangle)
+            self.vc[istate,3] = np.sin(phangle)
+            self.pmod = 2
+            
+        elif( self.cdim == 8 and self.imod == 2): # 8-components mixed initial
             self.vc[istate,0] = np.cos(phangle)/np.sqrt(2)
             self.vc[istate,1] = np.sin(phangle)/np.sqrt(2)
             self.vc[istate,2] = -np.sin(phangle)/np.sqrt(2)
             self.vc[istate,3] = np.cos(phangle)/np.sqrt(2)
-        elif( self.cdim == 4 and self.imod == 2 ):
-            self.vc[istate,0] = np.cos(phangle)*np.cos(phangle)
-            self.vc[istate,1] = np.sin(phangle)*np.cos(phangle)
-            self.vc[istate,2] = np.sin(phangle)*np.cos(phangle)
-            self.vc[istate,3] = np.sin(phangle)*np.sin(phangle)
+            self.vc[istate,4] = np.cos(phangle)/np.sqrt(2)
+            self.vc[istate,5] = np.sin(phangle)/np.sqrt(2)
+            self.vc[istate,6] = -np.sin(phangle)/np.sqrt(2)
+            self.vc[istate,7] = np.cos(phangle)/np.sqrt(2)
+            self.pmod = 3
         else:
             print('iniz error')
             exit()
             
     def popu(self):
         self.pop = np.zeros(self.vsize)
+        self.E = 0;
         
         if ( self.pmod ==0 ):
-            self.pop = np.sum(self.vc**2,axis=1)
+            for i in range(self.cdim):
+                self.pop += self.vc[:,i]**2
+                self.E += np.dot( self.vc[:,i], np.dot(self.H, self.vc[:,i]) )
         elif (self.pmod == 1):
-            self.pop = (self.vc[:,0]+self.vc[:,3])**2 + (self.vc[:,1]-self.vc[:,2])**2
+            self.pop = (self.vc[:,0] + self.vc[:,2])**2 + (self.vc[:,1] + self.vc[:,3])**2
+            self.E = ( np.dot( self.vc[:,0]+self.vc[:,2], np.dot(self.H, self.vc[:,0]+self.vc[:,2] ) ) +
+                       np.dot( self.vc[:,1]+self.vc[:,3], np.dot(self.H, self.vc[:,1]+self.vc[:,3] ) ) )
         elif (self.pmod == 2 ):
-            self.pop = self.vc[:,0]*self.vc[:,3]-self.vc[:,1]*self.vc[:,2]
+            self.pop = self.vc[:,0]*self.vc[:,2] + self.vc[:,1]*self.vc[:,3]
+            self.E = ( np.dot( self.vc[:,0], np.dot(self.H, self.vc[:,2] ) ) +
+                       np.dot( self.vc[:,1], np.dot(self.H, self.vc[:,3] ) ) )
+        elif (self.pmod == 3 ):
+            self.pop = self.vc[:,0]*self.vc[:,4] + self.vc[:,1]*self.vc[:,5] + (
+                self.vc[:,2]*self.vc[:,6] + self.vc[:,3]*self.vc[:,7] )
+            self.E = ( np.dot( self.vc[:,0], np.dot(self.H, self.vc[:,4] ) ) +
+                       np.dot( self.vc[:,1], np.dot(self.H, self.vc[:,5] ) ) +
+                       np.dot( self.vc[:,2], np.dot(self.H, self.vc[:,6] ) ) +
+                       np.dot( self.vc[:,3], np.dot(self.H, self.vc[:,7] ) ) )
         else:
             print('popu loss')
             pass
@@ -98,53 +129,125 @@ class vecc:
     def runmd(self):
         self.iniz()
         rcd = np.zeros((self.N, self.vsize))
+        totN = np.zeros(self.N)
+        totE = np.zeros(self.N)
+        
         
         for i in range(self.N):
-            HVdt = np.dot(self.H, self.vc)*self.dt
-            HV1dt = np.dot(self.Hd, self.vc)*self.dt
-            HV2dt = np.dot(self.Hnd, self.vc)*self.dt
+            #HVdt = np.dot(self.H, self.vc)*self.dt
+            #HV1dt = np.dot(self.Hd, self.vc)*self.dt
+            #HV2dt = np.dot(self.Hnd, self.vc)*self.dt
             
             if(self.rmod == 0): # 2-component equation
-                self.vc[:,0] += np.dot(self.H, self.vc[:,1])*self.dt*0.5
+                self.vc[:,0] += np.dot(self.H, self.vc[:,1])*self.dt/2
                 self.vc[:,1] += - np.dot(self.H, self.vc[:,0])*self.dt
-                self.vc[:,0] += np.dot(self.H, self.vc[:,1])*self.dt*0.5
+                self.vc[:,0] += np.dot(self.H, self.vc[:,1])*self.dt/2
+                
             elif(self.rmod == 1): # 4-component equation: Model I
-                self.vc[:,0] += HVdt[:,1]
-                self.vc[:,1] -= HVdt[:,0]
-                self.vc[:,2] += HVdt[:,3]
-                self.vc[:,3] -= HVdt[:,2]
+                self.vc[:,0] += np.dot(self.H, self.vc[:,1])*self.dt/2
+                self.vc[:,3] += - np.dot(self.H, self.vc[:,2])*self.dt/2
+                
+                self.vc[:,1] += - np.dot(self.H, self.vc[:,0])*self.dt                
+                self.vc[:,2] += np.dot(self.H, self.vc[:,3])*self.dt
+                
+                self.vc[:,0] += np.dot(self.H, self.vc[:,1])*self.dt/2
+                self.vc[:,3] += -np.dot(self.H, self.vc[:,2])*self.dt/2
+                
             elif(self.rmod == 2): # 4-component equation: Model my version
                 self.vc[:,0] -= HVdt[:,2]
                 self.vc[:,1] -= HVdt[:,0]
                 self.vc[:,2] += HVdt[:,3]
                 self.vc[:,3] += HVdt[:,1]
+                
             elif(self.rmod == 3): # 4-component equation: Model III
-                self.vc[:,0] += 0.5*HV1dt[:,2]-0.5*HV1dt[:,1] - HV2dt[:,1]
-                self.vc[:,1] += 0.5*HV1dt[:,0]+0.5*HV1dt[:,3] + HV2dt[:,0]
-                self.vc[:,2] += -0.5*HV1dt[:,0]-0.5*HV1dt[:,3] - HV2dt[:,3]
-                self.vc[:,3] += 0.5*HV1dt[:,2]-0.5*HV1dt[:,1] + HV2dt[:,2]
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/8
+                self.vc[:,0] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4 + np.dot(self.Hnd, self.vc[:,1])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/4 - np.dot(self.Hnd, self.vc[:,2])*self.dt/4
+                self.vc[:,0] += 0.5*np.dot(self.Hd, self.vc[:,3])*self.dt/4
+                self.vc[:,0] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4 + np.dot(self.Hnd, self.vc[:,1])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/4 - np.dot(self.Hnd, self.vc[:,2])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/8
+                
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4
+                self.vc[:,1] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/2 - np.dot(self.Hnd, self.vc[:,0])*self.dt/2
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/2 + np.dot(self.Hnd, self.vc[:,3])*self.dt/2
+                self.vc[:,1] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/2
+                self.vc[:,1] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/2 - np.dot(self.Hnd, self.vc[:,0])*self.dt/2
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,3])*self.dt/2 + np.dot(self.Hnd, self.vc[:,3])*self.dt/2
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4
+                
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/8
+                self.vc[:,0] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4 + np.dot(self.Hnd, self.vc[:,1])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/4 - np.dot(self.Hnd, self.vc[:,2])*self.dt/4
+                self.vc[:,0] += 0.5*np.dot(self.Hd, self.vc[:,3])*self.dt/4
+                self.vc[:,0] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4 + np.dot(self.Hnd, self.vc[:,1])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/4 - np.dot(self.Hnd, self.vc[:,2])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/8
+                
             elif(self.rmod == 4): # 4-component equation: Model IV
-                self.vc[:,0] += 0.5*HV1dt[:,2]-0.5*HV1dt[:,1] + HV2dt[:,2]
-                self.vc[:,1] += 0.5*HV1dt[:,0]+0.5*HV1dt[:,3] + HV2dt[:,3]
-                self.vc[:,2] += -0.5*HV1dt[:,0]-0.5*HV1dt[:,3] - HV2dt[:,0]
-                self.vc[:,3] += 0.5*HV1dt[:,2]-0.5*HV1dt[:,1] - HV2dt[:,1]
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/8
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4 + np.dot(self.Hnd, self.vc[:,1])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/4 - np.dot(self.Hnd, self.vc[:,0])*self.dt/4
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,3])*self.dt/4
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4 + np.dot(self.Hnd, self.vc[:,1])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/4 - np.dot(self.Hnd, self.vc[:,0])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/8
+                
+                self.vc[:,1] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/4
+                self.vc[:,0] += 0.5*np.dot(self.Hd, self.vc[:,3])*self.dt/2 + np.dot(self.Hnd, self.vc[:,3])*self.dt/2
+                self.vc[:,1] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/2 - np.dot(self.Hnd, self.vc[:,2])*self.dt/2
+                self.vc[:,0] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/2
+                self.vc[:,0] += 0.5*np.dot(self.Hd, self.vc[:,3])*self.dt/2 + np.dot(self.Hnd, self.vc[:,3])*self.dt/2
+                self.vc[:,1] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/2 - np.dot(self.Hnd, self.vc[:,2])*self.dt/2
+                self.vc[:,1] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/4
+                
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/8
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4 + np.dot(self.Hnd, self.vc[:,1])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/4 - np.dot(self.Hnd, self.vc[:,0])*self.dt/4
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,3])*self.dt/4
+                self.vc[:,2] += 0.5*np.dot(self.Hd, self.vc[:,1])*self.dt/4 + np.dot(self.Hnd, self.vc[:,1])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,0])*self.dt/4 - np.dot(self.Hnd, self.vc[:,0])*self.dt/4
+                self.vc[:,3] += -0.5*np.dot(self.Hd, self.vc[:,2])*self.dt/8
+                
             elif(self.rmod == 5): # 4-component equation: Model V
-                self.vc[:,0] += 0.5*HV1dt[:,2]-0.5*HV1dt[:,1] + 0.5*HV2dt[:,2] - 0.5*HV2dt[:,1]
-                self.vc[:,1] += 0.5*HV1dt[:,0]+0.5*HV1dt[:,3] + 0.5*HV2dt[:,3] + 0.5*HV2dt[:,0]
-                self.vc[:,2] += -0.5*HV1dt[:,0]-0.5*HV1dt[:,3] - 0.5*HV2dt[:,0] - 0.5*HV2dt[:,3] 
-                self.vc[:,3] += 0.5*HV1dt[:,2]-0.5*HV1dt[:,1] - 0.5*HV2dt[:,1] + 0.5*HV2dt[:,2]
+                print("not write")
+                exit()
+                
             elif(self.rmod ==6):
-                self.vc[:,0] += -HV1dt[:,1] + HV2dt[:,2]
-                self.vc[:,1] += HV1dt[:,0] + HV2dt[:,3]
-                self.vc[:,2] += -HV1dt[:,3] - HV2dt[:,0]
-                self.vc[:,3] += HV1dt[:,2] - HV2dt[:,1]
+                print("not write")
+                exit()
+                
+            elif(self.rmod == 7): # 8-component equation: Model X
+                self.vc[:,0] += np.dot(self.H, self.vc[:,1])*self.dt/2
+                self.vc[:,2] += np.dot(self.H, self.vc[:,3])*self.dt/2
+                self.vc[:,5] += - np.dot(self.H, self.vc[:,4])*self.dt/2
+                self.vc[:,7] += - np.dot(self.H, self.vc[:,6])*self.dt/2
+                
+                self.vc[:,1] += - np.dot(self.H, self.vc[:,0])*self.dt                
+                self.vc[:,3] += - np.dot(self.H, self.vc[:,2])*self.dt
+                self.vc[:,4] += np.dot(self.H, self.vc[:,5])*self.dt                
+                self.vc[:,6] += np.dot(self.H, self.vc[:,7])*self.dt
+                
+                self.vc[:,0] += np.dot(self.H, self.vc[:,1])*self.dt/2
+                self.vc[:,2] += np.dot(self.H, self.vc[:,3])*self.dt/2
+                self.vc[:,5] += - np.dot(self.H, self.vc[:,4])*self.dt/2
+                self.vc[:,7] += - np.dot(self.H, self.vc[:,6])*self.dt/2
+                
             rcd[i,:] = self.popu()
+            totN[i] = sum(rcd[i,:])
+            totE[i] = self.E
+            
             
         popdat = pd.DataFrame(rcd)
+        totNdat   = pd.DataFrame(totN)
+        totEdat   = pd.DataFrame(totE)
+        
         popdat.to_csv('pop.dat',header=None,sep=' ')
+        totNdat.to_csv('totN.dat',header=None,sep=' ')
+        totEdat.to_csv('totE.dat',header=None,sep=' ')
             
 
-idict={'dt':0.00001, 'Nstep':1000000, 'phangle':0.5 ,'istate':0}
+idict={'dt':0.02, 'Nstep':500, 'phangle':0.5 ,'istate':0}
 lamb = 0.2
 
 Hd = np.array([[10,0,0],[0,7,0],[0,0,2]])
@@ -153,10 +256,8 @@ H = Hd+Hnd
 Nsize = len(H)
 Ndim = 4
 
-mapvc = vecc(vsize=Nsize, cdim=Ndim, imod=0, pmod=0, rmod=0)
+mapvc = vecc(vsize=Nsize, cdim=Ndim, rmod=1, imod=2)
 mapvc.getkeys(idict)
 mapvc.getH(H)
 mapvc.getHs(Hd,Hnd)
-mapvc.runmd()
-
-os.system('python3 ../py/pop.py pop.dat 1 Y')
+mapvc.runmd() 
