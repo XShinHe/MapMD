@@ -22,4 +22,4 @@ for i in range(N):
     p = p/scl
     rcdxp[:,i]=x**2+p**2
 aaa=pd.DataFrame(rcdxp.T)
-aaa.to_csv('arbi_%.1f.csv'%E,header=None,sep=' ')
+aaa.to_csv('arbi_E%.1f.csv'%E,header=None,sep=' ')

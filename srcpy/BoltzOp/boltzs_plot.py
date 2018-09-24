@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-a=pd.read_csv("bol_all.txt")
+a=pd.read_csv("boltzs.txt")
 rcd=a.values
 bx=1
 ex=180
@@ -13,5 +13,5 @@ plt.title("Comparision of evaluation Boltzmann Operator \n(calculation loop in N
 plt.xlabel(r"$\beta$")
 plt.ylabel(r"$Tr[e^{-\beta H}]$")
 plt.legend(loc=1)
-plt.savefig('bol_all.png')
+plt.savefig('boltzs.png')
 plt.show()

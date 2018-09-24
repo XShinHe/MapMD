@@ -1,4 +1,4 @@
-# renormalize method
+# reNormalize On the Fly method
 
 import numpy as np
 import pandas as pd

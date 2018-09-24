@@ -5,20 +5,20 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import sys
-import setinfo
+import loadfile as lf
 
 fflg=str(sys.argv[1]) # the filename to plot
 clmn=int(sys.argv[2]) # the column to plot
 
-myinfo = setinfo.Infolog('map.rc')
+myinfo = lf.Load('map.rc')
 
 a=pd.read_csv(fflg,sep='\s+',header=None)
 statname='null'
-if not setinfo.is_number(a.values[0,0]):
+if not lf.is_number(a.values[0,0]):
     a=pd.read_csv(fflg,sep='\s+')
     statname=str(a.columns.values[clmn])
 
-xs=a.values[:,0]*myinfo.dk['mapdtime']
+xs=a.values[:,0]*myinfo.args['mapdtime']
 if(clmn==0):
     ys=a.values[:,1:]
 else:

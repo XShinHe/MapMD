@@ -1,4 +1,6 @@
-# scaling method
+# shfit Hamiltonian method
+# tested by four spin-orbitial model
+
 import numpy as np
 import pandas as pd
 
@@ -30,4 +32,4 @@ for i in range(N):
     rcdxp[:,i]=x**2+p**2
     
 aaa=pd.DataFrame(rcdxp.T)
-aaa.to_csv('scaling.csv',header=None,sep=' ')
+aaa.to_csv('shfitH.csv',header=None,sep=' ')
